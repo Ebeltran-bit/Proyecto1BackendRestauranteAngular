@@ -134,3 +134,57 @@ Verificación (Python 3.9.23 y Chromium):
   añadir sin presentación, cantidad 150 bloqueada por el formulario, mesa sin pedidos (Barra) con
   su aviso, selección automática de la única presentación del agua. Sin errores en la consola.
 - Revisado en móvil (400 px) y escritorio (1280 px), en modo claro y oscuro.
+
+## Fase 3: Backend para el frontend Angular
+
+### Requisitos (2026-10-16)
+
+David abre la fase del cliente Angular, en un repositorio aparte
+([Proyecto1FrontendRestauranteAngular](https://github.com/Ebeltran-bit/Proyecto1FrontendRestauranteAngular),
+con su propia memoria en `docs/memoria-proyecto.md`). Pide usuarios manager y camarero, una
+opción de "mesa pagada" que borre la cuenta y deje la mesa lista para otra, elegir el camarero
+que ha servido la mesa y crear y borrar camareros. Aprueba además estos extras: plano de mesas
+con estados, precios y ticket imprimible, borrar líneas de pedido, historial y resumen del día
+para el manager, diseño para móvil y notas en los pedidos. Aprueba trabajar en la rama `fase3`,
+creada desde `fase2`.
+
+### Decisiones (2026-10-16)
+
+| # | Decisión | Motivo |
+|---|----------|--------|
+| 1 | Camareros y managers son el mismo recurso: usuarios con rol `waiter` o `manager` | Un camarero creado por el manager puede iniciar sesión y también elegirse como camarero de una mesa; no hay dos listas que mantener |
+| 2 | Login con token aleatorio en memoria (`POST /auth/login`, cabecera `Bearer`) y caducidad de 12 h | Suficiente mientras los datos estén en memoria; sin paquetes nuevos |
+| 3 | Contraseñas con PBKDF2-SHA256 y sal, usando `hashlib`, `hmac` y `secrets` | Librería estándar de Python: David pidió no instalar nada sin permiso |
+| 4 | Todas las rutas piden sesión salvo `/health` y `/auth/login`; crear y borrar usuarios, el historial y el resumen piden rol manager | Una app de negocio no puede dejar que cualquiera en la red cambie pedidos |
+| 5 | Se quita la interfaz HTML provisional de `/` | La sustituye el cliente Angular, y sin login ya no podía llamar a la API |
+| 6 | Precio por producto y presentación, guardado en céntimos en los datos de ejemplo | Una ración y una tapa del mismo plato cuestan distinto; los céntimos evitan errores de redondeo en los totales |
+| 7 | El pedido guarda su `unit_price` al crearse o cambiar de presentación; el cliente nunca lo envía | Un cambio de carta no altera cuentas abiertas y nadie puede poner su precio |
+| 8 | "Mesa pagada" (`POST /tables/{id}/pay`) guarda la cuenta con nombres y precios copiados, vacía los pedidos y libera al camarero | El ticket y el historial siguen siendo correctos aunque luego se borre un camarero; la mesa admite un pedido nuevo al momento |
+| 9 | Para cobrar hace falta un camarero asignado y al menos un pedido (409 si no) | Es lo que pidió David: saber quién ha servido cada mesa |
+| 10 | No se puede borrar a un camarero con mesas abiertas, a uno mismo ni al último manager (409) | Evita mesas sin responsable y quedarse sin nadie que administre |
+| 11 | `GET /menu` devuelve la carta entera con precios en una sola petición | El cliente la necesita completa; antes eran 18 peticiones |
+| 12 | `GET /tables` devuelve el estado de cada mesa (libre u ocupada, camarero, nº de pedidos y total) | El plano de mesas se dibuja con una sola petición |
+| 13 | Las reglas que combinan varios almacenes van en `app/services/` | Los routers quedan como capa fina, en la línea de la estructura por capas que pide el PDF |
+| 14 | CORS no se activa: en desarrollo Angular reenvía `/api` al puerto 8000 con su proxy | Mismo origen para el navegador, sin configuración extra en la API |
+
+### Cambios (2026-10-16)
+
+- Nuevos esquemas `user.py` y `bill.py`; `Order` con `unit_price` y `notes`; `TableStatus`,
+  `WaiterAssignment`, `ProductPresentation` (con precio), `MenuCategory` y `MenuProduct`.
+- Nuevos almacenes `user_store.py` (usuarios y sesiones), `table_waiters.py` y `bill_store.py`;
+  `order_store.py` con borrado y `take_table` (vacía una mesa de una vez).
+- Nuevo `security.py` y dependencias `get_current_user` y `require_manager`.
+- Nuevos routers `auth`, `users`, `menu` y `bills`; `tables` con estado, camarero y cobro;
+  `orders` con notas, precio y `DELETE`.
+- Nuevos servicios `services/tables.py` (estado de la mesa) y `services/billing.py` (cobro y resumen).
+- Datos de ejemplo: precios, camarero de las mesas 1 y 2, y tres usuarios de demostración.
+- Se borran `app/static/` y `tests/test_interface.py`.
+- Pruebas: `conftest.py` con clientes de manager, camarero y sin sesión; nuevas `test_auth.py`,
+  `test_users.py`, `test_billing.py` y `test_menu.py`; ampliadas las de mesas y pedidos.
+- README: usuarios de demostración, autenticación, todos los endpoints y errores 401, 403 y 409.
+
+### Verificación (2026-10-16, Python 3.9.25)
+
+- `python -m pytest -W error`: 92 de 92 pruebas pasan, sin avisos.
+- Probada junto al cliente Angular en Chromium: login, añadir, editar y quitar pedidos, cobrar
+  con ticket, bloqueo de cobro sin camarero, crear y borrar usuarios, historial y resumen.

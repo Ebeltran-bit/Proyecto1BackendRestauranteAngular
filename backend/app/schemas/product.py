@@ -3,7 +3,7 @@ from typing import List
 from pydantic import BaseModel
 
 from app.schemas.category import Category
-from app.schemas.presentation import Presentation
+from app.schemas.presentation import ProductPresentation
 
 
 class Product(BaseModel):
@@ -18,4 +18,16 @@ class ProductDetail(Product):
     """Product with its category and the presentations it can currently be ordered in."""
 
     category: Category
-    presentations: List[Presentation]
+    presentations: List[ProductPresentation]
+
+
+class MenuProduct(Product):
+    """Product inside the full menu, with its active presentations and prices."""
+
+    presentations: List[ProductPresentation]
+
+
+class MenuCategory(Category):
+    """Category of the full menu with all its products."""
+
+    products: List[MenuProduct]

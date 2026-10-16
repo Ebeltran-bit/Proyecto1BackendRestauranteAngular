@@ -1,29 +1,28 @@
-from pathlib import Path
+from fastapi import Depends, FastAPI
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-
-from app.routers import categories, health, orders, products, tables
-
-STATIC_DIR = Path(__file__).parent / "static"
+from app.routers import auth, bills, categories, health, menu, orders, products, tables, users
+from app.routers.dependencies import get_current_user
 
 app = FastAPI(
     title="Restaurant Orders API",
-    description="API REST para que el personal de sala gestione los pedidos de las mesas.",
-    version="0.2.0",
+    description=(
+        "API REST para que el personal de sala gestione los pedidos de las mesas. "
+        "Salvo /health y /auth/login, todas las rutas piden el token de POST /auth/login "
+        "(botón Authorize)."
+    ),
+    version="0.3.0",
 )
 
+# Public routes.
 app.include_router(health.router)
-app.include_router(tables.router)
-app.include_router(orders.router)
-app.include_router(categories.router)
-app.include_router(products.router)
+app.include_router(auth.router)
 
-# Interfaz visual para el personal de sala: http://127.0.0.1:8000/
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-
-@app.get("/", include_in_schema=False)
-def waiter_interface() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+# Everything else needs a logged-in user; manager-only routes add their own check.
+logged_in = [Depends(get_current_user)]
+app.include_router(tables.router, dependencies=logged_in)
+app.include_router(orders.router, dependencies=logged_in)
+app.include_router(menu.router, dependencies=logged_in)
+app.include_router(categories.router, dependencies=logged_in)
+app.include_router(products.router, dependencies=logged_in)
+app.include_router(users.router, dependencies=logged_in)
+app.include_router(bills.router, dependencies=logged_in)

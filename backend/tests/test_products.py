@@ -10,9 +10,9 @@ def test_product_detail_includes_category_and_presentations(client):
         "category_id": 2,
         "category": {"id": 2, "name": "Entrantes"},
         "presentations": [
-            {"id": 2, "name": "Tapa"},
-            {"id": 3, "name": "Media ración"},
-            {"id": 4, "name": "Ración"},
+            {"id": 2, "name": "Tapa", "price": 3.0},
+            {"id": 3, "name": "Media ración", "price": 5.5},
+            {"id": 4, "name": "Ración", "price": 8.0},
         ],
     }
 
@@ -27,7 +27,7 @@ def test_presentations_only_include_active_ones(client):
 
 
 def test_drink_is_only_sold_by_unit(client):
-    assert client.get("/products/1/presentations").json() == [{"id": 1, "name": "Unidad"}]
+    assert client.get("/products/1/presentations").json() == [{"id": 1, "name": "Unidad", "price": 1.8}]
 
 
 def test_unknown_product_returns_404(client):

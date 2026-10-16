@@ -6,3 +6,9 @@ class Presentation(BaseModel):
 
     id: int
     name: str
+
+
+class ProductPresentation(Presentation):
+    """Presentation of one specific product, with the price it is sold at."""
+
+    price: float

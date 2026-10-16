@@ -5,8 +5,8 @@ def test_list_orders_of_a_table(client):
     response = client.get("/tables/1/orders")
     assert response.status_code == 200
     assert response.json() == [
-        {"id": 1, "table_id": 1, "product_id": 3, "presentation_id": 1, "quantity": 2},
-        {"id": 2, "table_id": 1, "product_id": 4, "presentation_id": 4, "quantity": 1},
+        {"id": 1, "table_id": 1, "product_id": 3, "presentation_id": 1, "quantity": 2, "unit_price": 2.8, "notes": None},
+        {"id": 2, "table_id": 1, "product_id": 4, "presentation_id": 4, "quantity": 1, "unit_price": 8.0, "notes": None},
     ]
 
 
@@ -27,7 +27,7 @@ def test_create_order_then_it_appears_in_the_table(client):
     response = client.post("/tables/3/orders", json=body)
     assert response.status_code == 201
     created = response.json()
-    assert created == {"id": 4, "table_id": 3, **body}
+    assert created == {"id": 4, "table_id": 3, **body, "unit_price": 6.5, "notes": None}
     assert client.get("/tables/3/orders").json() == [created]
     assert client.get(f"/tables/3/orders/{created['id']}").json() == created
 
@@ -89,14 +89,19 @@ def test_create_order_with_malformed_json_returns_422(client):
 def test_update_quantity(client):
     response = client.patch("/tables/1/orders/1", json={"quantity": 5})
     assert response.status_code == 200
-    assert response.json() == {"id": 1, "table_id": 1, "product_id": 3, "presentation_id": 1, "quantity": 5}
+    assert response.json() == {
+        "id": 1, "table_id": 1, "product_id": 3, "presentation_id": 1, "quantity": 5, "unit_price": 2.8, "notes": None
+    }
     assert client.get("/tables/1/orders/1").json()["quantity"] == 5
 
 
 def test_update_presentation_and_quantity(client):
     response = client.patch("/tables/1/orders/2", json={"presentation_id": 2, "quantity": 3})
     assert response.status_code == 200
-    assert response.json() == {"id": 2, "table_id": 1, "product_id": 4, "presentation_id": 2, "quantity": 3}
+    # The price follows the new presentation: a tapa of bravas costs 3.00, not 8.00.
+    assert response.json() == {
+        "id": 2, "table_id": 1, "product_id": 4, "presentation_id": 2, "quantity": 3, "unit_price": 3.0, "notes": None
+    }
 
 
 def test_update_to_inactive_presentation_returns_422_and_keeps_order(client):
@@ -114,6 +119,8 @@ def test_update_to_inactive_presentation_returns_422_and_keeps_order(client):
         {"quantity": 0},
         {"product_id": 2},  # the product of an order cannot be changed
         {"table_id": 2},
+        {"unit_price": 0.1},  # the price comes from the menu, never from the client
+        {"notes": "x" * 201},
     ],
 )
 def test_update_with_invalid_json_returns_422(client, body):
@@ -133,3 +140,37 @@ def test_order_of_another_table_returns_404(client):
 def test_unknown_order_returns_404(client):
     assert client.get("/tables/1/orders/999").status_code == 404
     assert client.patch("/tables/1/orders/999", json={"quantity": 1}).status_code == 404
+
+
+def test_create_order_with_notes(client):
+    body = {"product_id": 7, "presentation_id": 4, "quantity": 1, "notes": "  Poco hecho  "}
+    created = client.post("/tables/3/orders", json=body).json()
+    assert created["notes"] == "Poco hecho"
+    assert created["unit_price"] == 16.5
+
+
+def test_update_and_clear_notes(client):
+    assert client.patch("/tables/1/orders/1", json={"notes": "Sin gluten"}).json()["notes"] == "Sin gluten"
+    assert client.patch("/tables/1/orders/1", json={"notes": None}).json()["notes"] is None
+    client.patch("/tables/1/orders/1", json={"notes": "Fría"})
+    assert client.patch("/tables/1/orders/1", json={"notes": ""}).json()["notes"] is None
+
+
+def test_delete_order(client):
+    response = client.delete("/tables/1/orders/1")
+    assert response.status_code == 204
+    assert [order["id"] for order in client.get("/tables/1/orders").json()] == [2]
+    assert client.get("/tables/1/orders/1").status_code == 404
+
+
+def test_delete_order_of_another_table_returns_404(client):
+    assert client.delete("/tables/1/orders/3").status_code == 404
+    assert client.get("/tables/2/orders/3").status_code == 200
+
+
+def test_waiter_can_manage_orders(waiter_client):
+    created = waiter_client.post("/tables/4/orders", json={"product_id": 1, "presentation_id": 1, "quantity": 1})
+    assert created.status_code == 201
+    order_id = created.json()["id"]
+    assert waiter_client.patch(f"/tables/4/orders/{order_id}", json={"quantity": 2}).status_code == 200
+    assert waiter_client.delete(f"/tables/4/orders/{order_id}").status_code == 204

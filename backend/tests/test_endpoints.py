@@ -16,7 +16,7 @@ def test_list_categories_returns_all_categories(client):
 def test_list_tables_returns_all_tables(client):
     response = client.get("/tables")
     assert response.status_code == 200
-    assert response.json() == [table.model_dump() for table in TABLES]
+    assert [{"id": t["id"], "name": t["name"]} for t in response.json()] == [t.model_dump() for t in TABLES]
 
 
 def test_category_products_only_include_that_category(client):

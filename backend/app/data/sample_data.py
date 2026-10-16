@@ -1,12 +1,12 @@
-"""In-memory sample data for Phases 1 and 2.
+"""In-memory sample data.
 
 It replaces the MySQL database until Phase 3. Lookup indexes are built once at
 import time so each request is a dictionary access instead of a list scan.
 """
 
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
-from app.schemas import Category, Order, Presentation, Product, Table
+from app.schemas import Category, Order, Presentation, Product, ProductPresentation, Table
 
 CATEGORIES: List[Category] = [
     Category(id=1, name="Bebidas"),
@@ -38,21 +38,26 @@ PRESENTATIONS: List[Presentation] = [
     Presentation(id=4, name="Ración"),
 ]
 
-# Presentations each product can currently be ordered in. It mirrors the
-# availability columns of the `Carta` table (unidad, tapa, media ración, ración).
+# Price in cents of each product in each presentation it can currently be
+# ordered in. It mirrors the availability and price columns of the `Carta` table
+# (unidad, tapa, media ración, ración). Cents avoid rounding errors in totals.
+PRODUCT_PRICES_CENTS: Dict[int, Dict[int, int]] = {
+    1: {1: 180},
+    2: {1: 250},
+    3: {1: 280},
+    4: {2: 300, 3: 550, 4: 800},
+    5: {1: 150, 3: 650, 4: 1100},
+    6: {2: 300, 4: 900},
+    7: {3: 950, 4: 1650},
+    8: {2: 350, 3: 700, 4: 1200},
+    9: {2: 400, 3: 800, 4: 1400},
+    10: {2: 350, 4: 1100},
+    11: {1: 550},
+    12: {1: 450},
+}
+
 PRODUCT_PRESENTATION_IDS: Dict[int, List[int]] = {
-    1: [1],
-    2: [1],
-    3: [1],
-    4: [2, 3, 4],
-    5: [1, 3, 4],
-    6: [2, 4],
-    7: [3, 4],
-    8: [2, 3, 4],
-    9: [2, 3, 4],
-    10: [2, 4],
-    11: [1],
-    12: [1],
+    product_id: list(prices) for product_id, prices in PRODUCT_PRICES_CENTS.items()
 }
 
 TABLES: List[Table] = [
@@ -73,16 +78,35 @@ PRESENTATIONS_BY_ID: Dict[int, Presentation] = {p.id: p for p in PRESENTATIONS}
 
 PRODUCTS_BY_ID: Dict[int, Product] = {product.id: product for product in PRODUCTS}
 
-PRODUCT_PRESENTATIONS: Dict[int, List[Presentation]] = {
-    product_id: [PRESENTATIONS_BY_ID[pid] for pid in presentation_ids]
-    for product_id, presentation_ids in PRODUCT_PRESENTATION_IDS.items()
+PRODUCT_PRESENTATIONS: Dict[int, List[ProductPresentation]] = {
+    product_id: [
+        ProductPresentation(**PRESENTATIONS_BY_ID[pid].model_dump(), price=cents / 100)
+        for pid, cents in prices.items()
+    ]
+    for product_id, prices in PRODUCT_PRICES_CENTS.items()
 }
+
+
+def unit_price(product_id: int, presentation_id: int) -> float:
+    """Price in euros of one unit of a product in a presentation it is sold in."""
+    return PRODUCT_PRICES_CENTS[product_id][presentation_id] / 100
 
 TABLES_BY_ID: Dict[int, Table] = {table.id: table for table in TABLES}
 
 # Orders the API starts with, so a table already has something to list.
 SAMPLE_ORDERS: List[Order] = [
-    Order(id=1, table_id=1, product_id=3, presentation_id=1, quantity=2),
-    Order(id=2, table_id=1, product_id=4, presentation_id=4, quantity=1),
-    Order(id=3, table_id=2, product_id=9, presentation_id=3, quantity=1),
+    Order(id=1, table_id=1, product_id=3, presentation_id=1, quantity=2, unit_price=unit_price(3, 1)),
+    Order(id=2, table_id=1, product_id=4, presentation_id=4, quantity=1, unit_price=unit_price(4, 4)),
+    Order(id=3, table_id=2, product_id=9, presentation_id=3, quantity=1, unit_price=unit_price(9, 3)),
+]
+
+# Waiter serving each table when the API starts (tables without orders have none).
+SAMPLE_TABLE_WAITERS: Dict[int, int] = {1: 2, 2: 3}
+
+# Demo staff: (username, full name, role, password). Passwords are only for the
+# demo; they are hashed when loaded and never stored or returned in plain text.
+SAMPLE_USERS: List[Tuple[str, str, str, str]] = [
+    ("manager", "Laura Gómez", "manager", "manager123"),
+    ("ana", "Ana Martín", "waiter", "camarero123"),
+    ("luis", "Luis Pérez", "waiter", "camarero123"),
 ]
